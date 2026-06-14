@@ -1,7 +1,7 @@
 [project]
-name = "my_project"
+name = "phd_scout"
 version = "0.1.0"
-description = "<brief project description>"
+description = "Automated scouting for PhD opportunities via recurring email digests."
 readme = "README.md"
 requires-python = ">=3.12, <3.13"
 dependencies = [

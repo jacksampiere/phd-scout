@@ -1,33 +1,10 @@
-# my_project
+# phd_scout
 
-<brief project description>
-
-## Template setup
-
-If `my_project` placeholders are still present in this repo, this is a fresh
-clone from the template. Complete setup before any other work:
-
-1. Ask the user for the project name, a description, and whether they need tests.
-2. Replace all placeholders throughout the repo:
-   - `my_project` in `README.md`, `CLAUDE.md`, and `pyproject.toml`
-   - `<brief project description>` in `README.md`, `CLAUDE.md`, and `pyproject.toml`
-      - `pyproject.toml` description should be a short one-liner, not the full description
-   - Rename the `my_project/` directory to the project name (snake case)
-3. If no tests: remove `pytest` from dev dependencies in `pyproject.toml`, delete `tests/`,
-   remove `[tool.pytest.ini_options]` from `pyproject.toml`, remove the
-   `pytest` step from `.github/workflows/ci.yml`, remove the "Run tests" row
-   from the Common commands table in `CLAUDE.md`, remove the "Tests live in
-   `tests/`..." line from the Conventions section in `CLAUDE.md`, and remove
-   the "Run tests" row and the "pytest" mention from the commands table and
-   CI note in `README.md`.
-4. Run `uv sync` to update the lockfile after any dependencies changes.
-5. Run `bash scripts/setup-claude.sh` to wire up task-observer.
-6. Run `pre-commit install` to wire up pre-commit hooks.
-7. Remove this entire "Template setup" section from `CLAUDE.md`, along with the "Using this template" and "Claude setup" sections in `README.md`.
-
-Do not proceed with any other work until these steps are complete.
+Automated scouting for PhD opportunities — built to surface positions and labs that align with a specific research direction via recurring email digests.
 
 ## Task Observer (meta-skill)
+
+Note: this requires .claude/skills/task-observer/ and refers to a local skill installed via symlink (not committed). Source: https://github.com/rebelytics/one-skill-to-rule-them-all
 
 At the start of any task-oriented session — any interaction where you will use
 tools and produce deliverables — invoke the task-observer skill before beginning
