@@ -4,7 +4,7 @@ Automated scouting for PhD opportunities — built to surface positions and labs
 
 ## Task Observer (meta-skill)
 
-Note: this requires .claude/skills/task-observer/ and refers to a local skill installed via symlink (not committed). Source: https://github.com/rebelytics/one-skill-to-rule-them-all
+Note: this requires `.claude/skills/task-observer/` and refers to a local skill installed via symlink (not committed). Source: https://github.com/rebelytics/one-skill-to-rule-them-all
 
 At the start of any task-oriented session — any interaction where you will use
 tools and produce deliverables — invoke the task-observer skill before beginning
