@@ -1,3 +1,6 @@
+# Personal scoring rubric — never commit (commit profile.template.md instead)
+profile.md
+
 # Local agent preferences
 **/CLAUDE.local.md
 .claude/settings.local.json
