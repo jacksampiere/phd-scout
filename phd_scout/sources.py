@@ -25,6 +25,7 @@ Live-verified 2026-06-16:
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from urllib.parse import quote_plus, urljoin
@@ -88,6 +89,22 @@ def _clean(text: str | None, limit: int = 500) -> str:
     plain = BeautifulSoup(text, "html.parser").get_text(" ", strip=True)
     plain = re.sub(r"\s+", " ", plain).strip()
     return plain[:limit]
+
+
+def _find_jobposting(html: str) -> dict | None:
+    """Return the schema.org JobPosting object from a page's JSON-LD, or None."""
+    soup = BeautifulSoup(html, "html.parser")
+    for tag in soup.find_all("script", attrs={"type": "application/ld+json"}):
+        try:
+            data = json.loads(tag.string or "")
+        except (json.JSONDecodeError, TypeError):
+            continue
+        # JSON-LD may be a single object, a list, or wrapped in @graph.
+        candidates = data if isinstance(data, list) else data.get("@graph", [data])
+        for obj in candidates:
+            if isinstance(obj, dict) and obj.get("@type") == "JobPosting":
+                return obj
+    return None
 
 
 # --- Fetchers --------------------------------------------------------------
@@ -155,10 +172,41 @@ def fetch_euraxess() -> list[dict]:
     return listings
 
 
+def _jobsacuk_detail(url: str) -> tuple[str, str | None]:
+    """Fetch a jobs.ac.uk detail page → (description, date).
+
+    Uses the page's schema.org JobPosting JSON-LD (description + datePosted +
+    employer + location). Returns ("", None) on any failure so the caller can
+    fall back to the title — a missing detail page never drops the listing.
+    """
+    resp = _get(url, "jobs.ac.uk")
+    if resp is None:
+        return "", None
+    posting = _find_jobposting(resp.text)
+    if posting is None:
+        return "", None
+    employer = posting.get("hiringOrganization") or {}
+    employer_name = employer.get("name", "") if isinstance(employer, dict) else ""
+    location = posting.get("jobLocation") or {}
+    if isinstance(location, list):
+        location = location[0] if location else {}
+    address = location.get("address", {}) if isinstance(location, dict) else {}
+    place = address.get("addressLocality", "") if isinstance(address, dict) else ""
+    prefix = " — ".join(p for p in (employer_name, place) if p)
+    body = _clean(posting.get("description"), limit=1200)
+    description = f"{prefix}. {body}" if prefix else body
+    return description, posting.get("datePosted") or None
+
+
 def fetch_jobsacuk() -> list[dict]:
-    """jobs.ac.uk jobs parsed from the server-rendered search results."""
-    listings: list[dict] = []
-    seen: set[str] = set()
+    """jobs.ac.uk jobs: keyword search for candidates, enriched per detail page.
+
+    The search results give id/title/url; each job's detail page carries a
+    schema.org JobPosting with the full abstract + date, which we fetch so the
+    scorer sees more than a bare title. Detail-fetch failures fall back to the
+    title (see ``_jobsacuk_detail``).
+    """
+    candidates: dict[str, dict] = {}  # job_id -> {title, url}
     for keyword in KEYWORDS:
         resp = _get(JOBSACUK_SEARCH.format(q=quote_plus(keyword)), "jobs.ac.uk")
         if resp is None:
@@ -171,19 +219,23 @@ def fetch_jobsacuk() -> list[dict]:
                 continue
             job_id = match.group(1)
             title = anchor.get_text(strip=True)
-            if not title or job_id in seen:
+            if not title or job_id in candidates:
                 continue
-            seen.add(job_id)
-            listings.append(
-                {
-                    "id": f"jobsacuk:{job_id}",
-                    "title": title,
-                    "url": urljoin(JOBSACUK_BASE, href),
-                    "description": title,
-                    "source": "jobs.ac.uk",
-                    "date": None,
-                }
-            )
+            candidates[job_id] = {"title": title, "url": urljoin(JOBSACUK_BASE, href)}
+
+    listings: list[dict] = []
+    for job_id, cand in candidates.items():
+        description, date = _jobsacuk_detail(cand["url"])
+        listings.append(
+            {
+                "id": f"jobsacuk:{job_id}",
+                "title": cand["title"],
+                "url": cand["url"],
+                "description": description or cand["title"],
+                "source": "jobs.ac.uk",
+                "date": date,
+            }
+        )
     return listings
 
 

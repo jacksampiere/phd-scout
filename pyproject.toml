@@ -5,6 +5,7 @@ description = "Automated scouting for PhD opportunities via recurring email dige
 readme = "README.md"
 requires-python = ">=3.12, <3.13"
 dependencies = [
+  "anthropic>=0.109.2",
   "beautifulsoup4>=4.15.0",
   "feedparser>=6.0.12",
   "python-dotenv>=1.0.0",
