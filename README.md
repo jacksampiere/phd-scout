@@ -19,7 +19,7 @@ GitHub Actions (daily cron, daily.yml)
   └─ python -m phd_scout
        ├─ sources.py   fetch new listings from job-board feeds/APIs
        ├─ scoring.py   score each via Claude API against the research profile
-       ├─ state.py     skip anything already seen (seen.json, committed back)
+       ├─ state.py     skip anything already seen (seen.json, kept in the Actions cache)
        └─ digest.py    email a digest of matches (Gmail SMTP)
 ```
 
@@ -52,9 +52,10 @@ Create your profile from the template (this file is gitignored — it holds pers
 cp profile.template.md profile.md   # then edit profile.md with your research interests
 ```
 
-Add GitHub Actions secrets for the scheduled monitor: `ANTHROPIC_API_KEY`, `GMAIL_ADDRESS`,
-`GMAIL_APP_PASSWORD` (Gmail app passwords require 2-factor auth enabled), `DIGEST_RECIPIENT`.
-Trigger `daily.yml` manually from the Actions tab to test before relying on the schedule.
+The scheduled monitor needs five GitHub Actions secrets (`ANTHROPIC_API_KEY`, `GMAIL_ADDRESS`,
+`GMAIL_APP_PASSWORD`, `DIGEST_RECIPIENT`, `PROFILE_MD`) and a one-time verification run. See
+**[docs/operations.md](docs/operations.md)** for the full setup, run, state-management, and
+troubleshooting guide.
 
 Ruff and pytest are enforced by CI on push and PRs to main:
 
@@ -67,4 +68,4 @@ Ruff and pytest are enforced by CI on push and PRs to main:
 
 ---
 
-_A personal research tool. The scoring profile (`profile.md`) is intentionally kept out of version control._
+_A personal research tool. The scoring profile (`profile.md`) and dedup state (`seen.json`) are intentionally kept out of version control._
