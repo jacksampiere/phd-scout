@@ -1,6 +1,9 @@
 # Personal scoring rubric — never commit (commit profile.template.md instead)
 profile.md
 
+# Dedup state — lives in the Actions cache, not git
+seen.json
+
 # Local agent preferences
 **/CLAUDE.local.md
 .claude/settings.local.json

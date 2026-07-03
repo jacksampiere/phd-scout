@@ -1,0 +1,52 @@
+name: Daily digest
+
+on:
+  schedule:
+    - cron: "0 15 * * *"    # daily 15:00 UTC (~7 AM PST / 8 AM PDT)
+  workflow_dispatch:          # manual trigger for testing
+
+concurrency:
+  group: phd-scout-digest     # never let two runs race the cache
+  cancel-in-progress: false
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest    # GitHub-hosted throwaway VM; free for public repos
+    timeout-minutes: 20       # cap a hung source/API call
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v4      # mirror ci.yml exactly
+        with:
+          python-version: "3.12"
+
+      - run: uv sync
+
+      - name: Restore dedup state        # rotating-key cache pattern
+        uses: actions/cache@v4
+        with:
+          path: seen.json
+          key: seen-json-${{ github.run_id }}   # unique per run -> always saves at post
+          restore-keys: seen-json-              # restores the most recent prior state
+
+      - name: Write profile.md from secret
+        run: printf '%s' "$PROFILE_MD" > profile.md
+        env:
+          PROFILE_MD: ${{ secrets.PROFILE_MD }}
+
+      - name: Run monitor
+        run: uv run python -m phd_scout
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          DIGEST_RECIPIENT: ${{ secrets.DIGEST_RECIPIENT }}
+
+      - name: Publish state snapshot (viewable/downloadable)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: seen-json
+          path: seen.json
+          if-no-files-found: ignore
+          retention-days: 90
