@@ -1,8 +1,11 @@
-"""Entry point: ``python -m phd_scout [--dry-run]``.
+"""Entry point: ``python -m phd_scout [--dry-run | --score | --preview]``.
 
-Stage 1 wires up the source fetchers and the ``--dry-run`` diagnostic. Scoring,
-state, and the email digest land in later stages; until then the default run
-falls back to the dry-run view.
+Diagnostic ladder (per CLAUDE.md's diagnostics-before-automation working style):
+``--dry-run`` prints raw listings (no API), ``--score`` prints scores (API, no
+email/state), ``--send-test`` emails a synthetic digest (SMTP only, no API),
+``--preview`` renders the digest email without sending or touching state, and the
+default no-flag run is the full pipeline: fetch → dedup → score → email the
+surfaced matches → commit ``seen.json``.
 """
 
 from __future__ import annotations
@@ -10,10 +13,11 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from collections.abc import Callable
 
 from dotenv import load_dotenv
 
-from phd_scout import scoring, sources
+from phd_scout import digest, scoring, sources, state
 
 
 def _print_dry_run() -> None:
@@ -66,7 +70,8 @@ def _print_scored(limit: int | None) -> None:
         print(f"{bar}")
         print(
             f"[{flag}] A={listing['domain_fit']} B={listing['robustness']} "
-            f"core={listing['in_core_domain']}  ({listing['source']})"
+            f"core={listing['in_core_domain']} type={listing['position_type']}  "
+            f"({listing['source']})"
         )
         print(f"  {listing['title']}")
         print(f"  forms: {forms}")
@@ -78,6 +83,92 @@ def _print_scored(limit: int | None) -> None:
         f"skipped {len(scored) - surfaced} | {failed} failed to parse"
     )
     print(bar)
+
+
+def _run_pipeline(preview: bool, limit: int | None = None) -> None:
+    """Full run: fetch → dedup → score new → email surfaced → commit state.
+
+    Dedup happens *before* scoring so API calls are spent only on listings we
+    haven't seen. State is committed only after a clean pass (send succeeded, or
+    nothing to send); a ``FatalScoringError`` or SMTP failure aborts before the
+    ``seen.json`` write, so the next run retries the same listings. ``preview``
+    renders the digest to stdout and sends/commits nothing. ``limit`` caps how
+    many new listings are scored (sampled across sources) — handy to bound cost
+    while previewing.
+    """
+    log = logging.getLogger(__name__)
+    seen = state.load_seen()
+    fetched = _interleave(sources.fetch_all())
+    fresh = state.filter_unseen(fetched, seen)
+    if limit is not None:
+        fresh = fresh[:limit]
+    log.info("pipeline: %d fetched, %d new after dedup", len(fetched), len(fresh))
+    if not fresh:
+        log.info("pipeline: nothing new to score; done.")
+        return
+
+    scored = scoring.score_listings(fresh)
+    surfaced = [rec for rec in scored if rec["surface"]]
+    log.info(
+        "pipeline: scored %d/%d, %d surfaced", len(scored), len(fresh), len(surfaced)
+    )
+    subject, text_body, html_body = digest.format_digest(surfaced)
+
+    if preview:
+        print(subject, end="\n\n")
+        print(text_body)
+        log.info("preview: not sending; state left untouched.")
+        return
+
+    if surfaced:
+        digest.send_digest(subject, text_body, html_body)
+    else:
+        log.info("pipeline: no surfaced matches; no email sent.")
+
+    # Reached only on a clean pass — commit the newly-considered listings so we
+    # neither re-score nor re-send them next run.
+    state.save_seen(state.mark_seen(seen, fresh))
+    log.info("pipeline: marked %d listing(s) seen.", len(fresh))
+
+
+def _send_test() -> None:
+    """Send one synthetic digest to verify Gmail SMTP without spending any API.
+
+    Isolates the email boundary (credentials, app password, delivery) from
+    fetching and scoring so the two can be debugged independently.
+    """
+    sample = [
+        {
+            "title": "TEST — PhD in self-supervised learning for physiological signals",
+            "url": "https://example.org/test-listing",
+            "source": "send-test",
+            "date": "2026-06-30",
+            "domain_fit": 5,
+            "robustness": 4,
+            "in_core_domain": True,
+            "robustness_forms": ["hard-to-acquire data / access as a moat"],
+            "location": "United Kingdom",
+            "geo_out_of_scope": False,
+            "known": None,
+            "justification": "Synthetic listing sent by --send-test to check delivery.",
+        }
+    ]
+    subject, text_body, html_body = digest.format_digest(sample)
+    digest.send_digest(f"[test] {subject}", text_body, html_body)
+    print("Test digest sent.")
+
+
+def _run_guarded(fn: Callable[[], None]) -> None:
+    """Run a scoring-backed step, exiting loudly on a fatal (whole-run) error.
+
+    A non-zero exit makes a scheduled job fail visibly (and email you) instead of
+    silently producing an empty digest.
+    """
+    try:
+        fn()
+    except scoring.FatalScoringError as exc:
+        logging.getLogger(__name__).error("Aborting run: %s", exc)
+        sys.exit(1)
 
 
 def main() -> None:
@@ -99,7 +190,19 @@ def main() -> None:
         "--limit",
         type=int,
         default=None,
-        help="Cap how many listings --score processes (sampled across sources).",
+        help="Cap how many listings are scored, sampled across sources "
+        "(applies to --score and the --preview / full run).",
+    )
+    parser.add_argument(
+        "--preview",
+        action="store_true",
+        help="Run the full pipeline but print the digest instead of sending it; "
+        "sends no email and does not update seen.json.",
+    )
+    parser.add_argument(
+        "--send-test",
+        action="store_true",
+        help="Send one synthetic digest to verify Gmail SMTP. No fetch or scoring.",
     )
     args = parser.parse_args()
 
@@ -112,22 +215,15 @@ def main() -> None:
         _print_dry_run()
         return
 
-    if args.score:
-        try:
-            _print_scored(args.limit)
-        except scoring.FatalScoringError as exc:
-            # Loud, non-zero exit so the scheduled job fails visibly (and emails
-            # you) instead of silently producing an empty digest.
-            logging.getLogger(__name__).error("Aborting run: %s", exc)
-            sys.exit(1)
+    if args.send_test:
+        _send_test()
         return
 
-    # Later stages (scoring → state → digest) plug in here. Until then, the full
-    # run is the dry-run view so the entrypoint is always exercisable.
-    logging.getLogger(__name__).info(
-        "Full pipeline not yet implemented; showing dry-run output."
-    )
-    _print_dry_run()
+    if args.score:
+        _run_guarded(lambda: _print_scored(args.limit))
+        return
+
+    _run_guarded(lambda: _run_pipeline(preview=args.preview, limit=args.limit))
 
 
 if __name__ == "__main__":

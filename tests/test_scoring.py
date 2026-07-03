@@ -42,6 +42,17 @@ def test_decide_surface_covers_all_three_section3_rules() -> None:
     assert not scoring.decide_surface(domain_fit=1, robustness=1, in_core_domain=True)
 
 
+def test_is_eligible_position_omits_faculty_and_other() -> None:
+    # §6b: PhD is the target; postdoc/research_staff kept as outreach signal;
+    # unknown kept (broad net); faculty + non-research "other" are dropped.
+    assert scoring.is_eligible_position("phd")
+    assert scoring.is_eligible_position("postdoc")
+    assert scoring.is_eligible_position("research_staff")
+    assert scoring.is_eligible_position("unknown")
+    assert not scoring.is_eligible_position("faculty")
+    assert not scoring.is_eligible_position("other")
+
+
 def test_parse_response_handles_clean_fenced_and_garbage() -> None:
     payload = (
         '{"domain_fit": 4, "robustness": 3, '

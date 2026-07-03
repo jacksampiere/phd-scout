@@ -70,12 +70,28 @@ Also return:
   research interest described in the profile (§1–§2), even if its methodological
   fit is weak. This gates one of the §3 surfacing rules; judge it from the
   profile, not from any fixed notion of the field.
+- location: the position's country or region as a short string (e.g. "Germany",
+  "Singapore"), or "unknown" if the listing doesn't say.
+- geo_out_of_scope: boolean — apply the profile's own geography rules. True ONLY
+  if the location is clearly out of the profile's stated scope; false if it is in
+  scope OR the location is unknown. This is an advisory flag, not a filter.
+- known: if the listing matches one of the groups/labs the profile says it is
+  already aware of, return that group's name using the profile's own wording;
+  otherwise null. Judge this from the profile, not from any fixed list.
+- position_type: classify the role as exactly one of "phd" (PhD / DPhil / doctoral
+  studentship or researcher), "postdoc" (postdoctoral researcher / fellow /
+  associate), "research_staff" (research assistant / associate / technician not
+  requiring a doctorate), "faculty" (lecturer, professor, group leader, PI,
+  director, senior fellow), "other" (a clearly non-research role — teaching-only,
+  admin), or "unknown" if the listing doesn't make the role type clear. When
+  genuinely unsure, prefer "unknown" over "other".
 - justification: one or two sentences explaining the scores.
 
 Do NOT decide whether to surface the listing — only score it. Respond with exactly
 this JSON shape and nothing else:
 {{"domain_fit": <int 0-5>, "robustness": <int 0-5>, "robustness_forms": [<str>, ...], \
-"in_core_domain": <bool>, "justification": "<str>"}}
+"in_core_domain": <bool>, "location": "<str>", "geo_out_of_scope": <bool>, \
+"known": <str or null>, "position_type": "<str>", "justification": "<str>"}}
 
 === RESEARCH PROFILE ===
 {profile}
@@ -113,6 +129,18 @@ def decide_surface(domain_fit: int, robustness: int, in_core_domain: bool) -> bo
     if robustness >= 4 and in_core_domain:
         return True
     return False
+
+
+# Position types to keep out of the digest, per profile.md §6b. PhD is the target;
+# postdoc/research_staff are kept as active-lab / cold-outreach signal; faculty and
+# non-research "other" roles are dead-ends. "unknown" is kept (broad net). One-place
+# edit to retune (e.g. drop "other" from this set to also surface those).
+OMIT_POSITION_TYPES = frozenset({"faculty", "other"})
+
+
+def is_eligible_position(position_type: str) -> bool:
+    """Whether a role type should reach the digest at all (profile.md §6b)."""
+    return position_type not in OMIT_POSITION_TYPES
 
 
 # --- Response parsing ------------------------------------------------------
@@ -157,11 +185,18 @@ def _normalize(data: dict) -> dict | None:
     forms = data.get("robustness_forms") or []
     if not isinstance(forms, list):
         forms = [str(forms)]
+    known = data.get("known")
     return {
         "domain_fit": domain_fit,
         "robustness": robustness,
         "robustness_forms": [str(f) for f in forms],
         "in_core_domain": bool(data.get("in_core_domain", False)),
+        "location": (str(data.get("location", "")).strip() or "unknown"),
+        "geo_out_of_scope": bool(data.get("geo_out_of_scope", False)),
+        "known": (str(known).strip() or None) if known else None,
+        "position_type": (
+            str(data.get("position_type", "")).strip().lower() or "unknown"
+        ),
         "justification": str(data.get("justification", "")).strip(),
     }
 
@@ -239,9 +274,10 @@ def score_listing(
     if scores is None:
         return None
 
+    # Surface = clears the §3 research-fit bar AND is an eligible role type (§6b).
     scores["surface"] = decide_surface(
         scores["domain_fit"], scores["robustness"], scores["in_core_domain"]
-    )
+    ) and is_eligible_position(scores["position_type"])
     return {**listing, **scores}
 
 
