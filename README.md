@@ -9,9 +9,6 @@ boards, scores each against a research-interest rubric using the Claude API, and
 digest of only the matches — each with its scores, a one-line justification, and which
 robustness property it exhibits. New listings only; nothing already seen.
 
-**Lab map** _(phase 2)_. A one-time pass over the OpenAlex academic graph to find labs
-actively publishing in relevant areas, scored and ranked into a browsable table — complementing the monitor's reactive coverage of cycle-based and rolling postings.
-
 ## How it works
 
 ```

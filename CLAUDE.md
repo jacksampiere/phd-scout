@@ -42,17 +42,15 @@ tests/                 # mirror source: test_scoring.py, test_state.py, ...
 profile.md             # scoring rubric — GITIGNORED (personal)
 profile.template.md    # sanitized committed example
 seen.json              # auto-updated state, committed back by daily.yml
-labmap/                # phase 2 — OpenAlex lab map, not built yet
 ```
 
-## What this is — two subsystems
+## What this is — the rolling monitor
 
-1. **Rolling monitor** (primary, ongoing) — `daily.yml` runs `python -m phd_scout`, which
-   fetches new listings, scores them against `profile.md`, and emails a digest of matches.
-   Zero action required from the user beyond reading.
-2. **Lab map** (secondary, one-time) — `labmap/` uses the OpenAlex API to find labs
-   publishing on relevant topics, scored and ranked into a browsable table. Build _after_ the
-   monitor works.
+**Rolling monitor** (the whole project) — `daily.yml` runs `python -m phd_scout`, which
+fetches new listings, scores them against `profile.md`, and emails a digest of matches.
+Zero action required from the user beyond reading. Note the monitor already surfaces *labs*,
+not just positions: per profile §6b a postdoc/RA listing counts as an active-lab signal for
+cold outreach.
 
 ## Decisions (don't relitigate without reason)
 
