@@ -5,8 +5,7 @@ Automated scouting for PhD opportunities — built to surface positions and labs
 ## What it does
 
 **Rolling monitor.** A daily GitHub Actions job fetches new PhD listings from job
-boards, scores each against a research-interest rubric using the Claude API, and emails a short
-digest of only the matches — each with its scores, a one-line justification, and which
+boards, scores each against a research-interest rubric using the Claude API, and emails a short digest of only the matches — each with its scores, a one-line justification, and which
 robustness property it exhibits. New listings only; nothing already seen.
 
 ## How it works
